@@ -6,3 +6,5 @@ output:
   pdf_document: default
   word_document: default
 ---
+$Hello$
+
