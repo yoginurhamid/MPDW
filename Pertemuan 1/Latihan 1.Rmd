@@ -6,5 +6,176 @@ output:
   pdf_document: default
   word_document: default
 ---
-$Hello$
+
+```{r}
+install.packages("forecast")
+install.packages("graphics")
+install.packages("TTR")
+install.packages("TSA")
+library("forecast")
+library("graphics")
+library("TTR")
+library("TSA")
+```
+
+
+#Load data
+```{r}
+library(rio)
+data <- import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Pertemuan%201/Data%20Prak%201.csv")
+data
+```
+#Mengubah format Tanggal
+```{r}
+data$Date <- as.Date(data$Date, format="%Y-%m-%d")
+data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)` <- as.numeric(data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+str(data$Date);str(data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+```
+#Memilih tanggal 1 Jan 2006 hingga 1 Juni 2023 per bulan
+```{r}
+bulan <- data.frame(Date=seq(as.Date("2006-01-01"), as.Date("2023-06-01"), by='month'))
+penumpang <- merge(bulan,data,by="Date",all.x=T)
+nrow(penumpang)
+```
+#============Visualisasi Data========================
+```{r}
+#Plot bulanan jumlah penumpang KRL Jabodetabek
+ggplot(penumpang, aes(x=Date, y=`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)) + geom_point() +
+  geom_line() + xlab(" ") + ylab("Jumlah Penumpang") + 
+  ggtitle("KRL Jabodetabek") + theme_light()
+```
+```{r}
+#Plot tanpa point
+ggplot(penumpang, aes(x=Date, y=`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)) +
+  geom_line() + xlab(" ") + ylab("Jumlah Penumpang") + 
+  ggtitle("KRL Jabodetabek") + theme_light()
+```
+### Pembagian Data
+```{r}
+#membagi data latih dan data uji
+training_ma <- data[1:168,]
+testing_ma <- data[169:210,]
+train_ma.ts <- ts(training_ma$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+test_ma.ts <- ts(testing_ma$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+```
+### Eksplorasi Data
+```{r}
+View(data)
+str(data)
+dim(data)
+```
+```{r}
+#Mengubah data agar terbaca sebagai data deret waktu
+data.ts <- ts(data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+data.ts
+```
+```{r}
+#Menampilkan ringkasan data
+summary(data.ts)
+```
+```{r}
+#eksplorasi keseluruhan data
+plot(data, col="red",main="Plot semua data")
+points(data)
+```
+```{r}
+#eksplorasi data latih
+plot(train_ma.ts, col="blue",main="Plot data latih")
+points(train_ma.ts)
+```
+```{r}
+#eksplorasi data uji
+plot(test_ma.ts, col="blue",main="Plot data uji")
+points(test_ma.ts)
+```
+```{r}
+#Eksplorasi dengan GGPLOT
+library(ggplot2)
+ggplot() + 
+  geom_line(data = training_ma, aes(x = Date, y = `Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`, col = "Data Latih")) +
+  geom_line(data = testing_ma, aes(x = Date, y = `Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`, col = "Data Uji")) +
+  labs(x = "Date", y = "Jumlah Penumpang", color = "Legend") +
+  scale_colour_manual(name="Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+```
+### Single Moving Average (SMA)
+```{r}
+#pemulusan dengan parameter `m=4`
+data.sma<-SMA(train_ma.ts, n=4)
+data.sma
+```
+```{r}
+#forecast 1 periode ke depan
+data.ramal<-c(NA,data.sma)
+data.ramal
+```
+```{r}
+#forecast 42 periode ke depan
+data.gab<-cbind(aktual=c(train_ma.ts,rep(NA,42)),pemulusan=c(data.sma,rep(NA,42)),ramalan=c(data.ramal,rep(data.ramal[length(data.ramal)],41)))
+data.gab
+```
+```{r}
+#plot data deret waktu dari hasil peramalan
+ts.plot(data.ts, xlab="Date", ylab="Jumlah Penumpang", main= "SMA N=4 Data Jumlah Penumpang")
+points(data.ts)
+lines(data.gab[,2],col="green",lwd=2)
+lines(data.gab[,3],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.5)
+```
+```{r}
+#Menghitung nilai keakuratan data latih
+error_train.sma = train_ma.ts-data.ramal[1:length(train_ma.ts)]
+SSE_train.sma = sum(error_train.sma[5:length(train_ma.ts)]^2)
+MSE_train.sma = mean(error_train.sma[5:length(train_ma.ts)]^2)
+MAPE_train.sma = mean(abs((error_train.sma[5:length(train_ma.ts)]/train_ma.ts[5:length(train_ma.ts)])*100))
+
+akurasi_train.sma <- matrix(c(SSE_train.sma, MSE_train.sma, MAPE_train.sma))
+row.names(akurasi_train.sma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.sma) <- c("Akurasi m = 4")
+akurasi_train.sma
+```
+Dalam hal ini nilai MAPE data latih pada metode pemulusan SMA kurang dari 5%, nilai ini dapat dikategorikan sebagai nilai akurasi yang sangat baik. Selanjutnya dilakukan perhitungan nilai MAPE data uji pada metde pemulusan SMA.
+
+```{r}
+#Menghitung nilai keakuratan data uji
+error_test.sma = test_ma.ts-data.gab[169:210,3]
+SSE_test.sma = sum(error_test.sma^2)
+MSE_test.sma = mean(error_test.sma^2)
+MAPE_test.sma = mean(abs((error_test.sma/test_ma.ts*100)))
+
+akurasi_test.sma <- matrix(c(SSE_test.sma, MSE_test.sma, MAPE_test.sma))
+row.names(akurasi_test.sma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.sma) <- c("Akurasi m = 4")
+akurasi_test.sma
+```
+Perhitungan akurasi menggunakan data uji menghasilkan nilai MAPE yang kurang dari 10% sehingga nilai akurasi ini dapat dikategorikan sebagai sangat baik.
+
+### Double Moving Average (DMA)
+```{r}
+dma <- SMA(data.sma, n = 4)
+At <- 2*data.sma - dma
+Bt <- 2/(4-1)*(data.sma - dma)
+data.dma<- At+Bt
+data.ramal2<- c(NA, data.dma)
+
+t = 1:42
+f = c()
+
+for (i in t) {
+  f[i] = At[length(At)] + Bt[length(Bt)]*(i)
+}
+
+data.gab2 <- cbind(aktual = c(train_ma.ts,rep(NA,42)), pemulusan1 = c(data.sma,rep(NA,42)),pemulusan2 = c(data.dma, rep(NA,42)),At = c(At, rep(NA,42)), Bt = c(Bt,rep(NA,42)),ramalan = c(data.ramal2, f[-1]))
+data.gab2
+```
+#metode DMA divisualisasikan sebagai berikut
+```{r}
+ts.plot(data.ts, xlab="Date", ylab="Jumlah Penumpang", main= "DMA N=4 Data Jumlah Penumpang")
+points(data.ts)
+lines(data.gab2[,3],col="green",lwd=2)
+lines(data.gab2[,6],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.8)
+```
 
