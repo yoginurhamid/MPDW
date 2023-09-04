@@ -25,7 +25,7 @@ library("stats")
 
 ```{r}
 library(rio)
-data <- import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Pertemuan%201/Data%20Prak%201.xlsx")
+data <- import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Data/Data%20Prak%201.xlsx")
 data
 ```
 
@@ -636,7 +636,7 @@ Hasil akurasi dari data uji didapatkan skenario 2 dengan lamda=0.6 dan gamma=0.3
 ```{r}
 #Import data
 library(rio)
-data1 <- import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Pertemuan%201/Data%20Prak%201.xlsx")
+data1 <- import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Data/Data%20Prak%201.xlsx")
 data1
 data1.ts <- ts(data1$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
 ```
