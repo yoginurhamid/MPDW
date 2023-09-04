@@ -21,8 +21,8 @@ library("TSA")
 
 #Load data
 ```{r}
-library(rio)
-data <- import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Pertemuan%201/Data%20Prak%201.csv")
+library(readxl)
+data <- read_excel("C:/Users/ASUS/OneDrive/Documents/sem 5/Metode Peramalan Deret Waktu/MPDW/Pertemuan 1/Data Prak 1.xlsx")
 data
 ```
 #Mengubah format Tanggal

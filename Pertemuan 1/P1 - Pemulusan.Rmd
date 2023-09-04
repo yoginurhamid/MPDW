@@ -1,1 +1,760 @@
+---
+title: "Pertemuan 1 - Pemulusan"
+author:Yogi Nur Hamid
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
 
+## Library
+
+```{r}
+library("forecast")
+library("graphics")
+library("TTR")
+library("TSA")
+library("stats")
+```
+
+## Impor Data
+
+```{r}
+library(rio)
+data <- import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Pertemuan%201/Data%20Prak%201.xlsx")
+data
+```
+
+## Eksplorasi Data
+
+Melihat data menggunakan fungsi `View()`, struktur data menggunakan fungsi `str()`, dan dimensi data menggunakan fungsi `dim()`.
+
+```{r}
+View(data)
+str(data)
+dim(data)
+```
+#Mengubah format Tanggal dan Jumlah
+```{r}
+data$Date <- as.Date(data$Date, format="%Y-%m-%d")
+data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)` <- as.numeric(data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+str(data$Date);str(data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+```
+#Memilih tanggal 1 Jan 2006 hingga 1 Juni 2023 per bulan
+```{r}
+bulan <- data.frame(Date=seq(as.Date("2006-01-01"), as.Date("2023-06-01"), by='month'))
+penumpang <- merge(bulan,data,by="Date",all.x=T)
+nrow(penumpang)
+```
+
+#Mengubah data agar terbaca sebagai data deret waktu dengan fungsi `ts()` .
+```{r}
+data.ts <- ts(data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+data.ts
+```
+
+#Menampilkan ringkasan data
+```{r}
+summary(data.ts)
+```
+
+#Membuat plot data deret waktu
+```{r}
+ts.plot(data.ts, xlab="Periode Waktu", ylab="Jumlah Penumpang", 
+        main = "KRL Jabodetabek")
+points(data.ts)
+```
+#Menyimpan plot
+```{r}
+#menyimpan plot
+#dev.copy(png, "eksplorasi.png")
+#dev.off()
+```
+
+## Single Moving Average & Double Moving Average
+
+### Pembagian Data
+Pembagian data latih dan data uji dilakukan dengan perbandingan 80% data latih dan 20% data uji.
+```{r}
+#membagi data latih dan data uji
+training_ma <- data[1:168,]
+testing_ma <- data[169:210,]
+train_ma.ts <- ts(training_ma$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+test_ma.ts <- ts(testing_ma$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+```
+
+### Eksplorasi Data
+
+Eksplorasi data dilakukan pada keseluruhan data, data latih serta data uji menggunakan plot data deret waktu.
+```{r}
+#eksplorasi keseluruhan data
+plot(data.ts, col="black",main="Plot semua data")
+points(data.ts)
+
+#eksplorasi data latih
+plot(train_ma.ts, col="blue",main="Plot data latih")
+points(train_ma.ts)
+
+#eksplorasi data uji
+plot(test_ma.ts, col="red",main="Plot data uji")
+points(test_ma.ts)
+```
+```{r}
+#Eksplorasi dengan GGPLOT
+library(ggplot2)
+ggplot() + 
+  geom_line(data = training_ma, aes(x = Date, y = `Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`, col = "Data Latih")) +
+  geom_line(data = testing_ma, aes(x = Date, y = `Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`, col = "Data Uji")) +
+  labs(x = "Date", y = "Jumlah Penumpang", color = "Legend") +
+  scale_colour_manual(name="Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+```
+
+### Single Moving Average (SMA)
+Ide dasar dari Single Moving Average (SMA) adalah data suatu periode dipengaruhi oleh data periode sebelumnya. Metode pemulusan ini cocok digunakan untuk pola data stasioner atau konstan.
+```{r}
+#Pemulusan dengan parameter `m=4`
+data.sma<-SMA(train_ma.ts, n=4)
+data.sma
+```
+```{r}
+#Peramalan 1 periode kedepan
+data.ramal<-c(NA,data.sma)
+data.ramal
+```
+Selanjutnya akan dilakukan peramalan sejumlah data uji yaitu 42 periode. Pada metode SMA, hasil peramalan 42 periode ke depan akan bernilai sama dengan hasil peramalan 1 periode kedepan. Dalam hal ini akan dilakukan pengguabungan data aktual train, data hasil pemulusan dan data hasil ramalan 42 periode kedepan.
+
+```{r}
+#Pemulusan dan data hasil ramalan 42 periode kedepan
+data.gab<-cbind(aktual=c(train_ma.ts,rep(NA,42)),pemulusan=c(data.sma,rep(NA,42)),ramalan=c(data.ramal,rep(data.ramal[length(data.ramal)],41)))
+data.gab
+```
+```{r}
+#Plot data deret waktu dari hasil peramalan
+ts.plot(data.ts, xlab="Periode Waktu", ylab="Jumlah Penumpang", main= "SMA N=4 Data KRL Jabodetabek")
+points(data.ts)
+lines(data.gab[,2],col="green",lwd=2)
+lines(data.gab[,3],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.5)
+```
+Selanjutnya perhitungan akurasi dilakukan dengan ukuran akurasi *Sum Squares Error* (SSE), *Mean Square Error* (MSE) dan *Mean Absolute Percentage Error* (MAPE). Perhitungan akurasi dilakukan baik pada data latih maupun pada data uji.
+
+```{r}
+#Menghitung nilai keakuratan data latih
+error_train.sma = train_ma.ts-data.ramal[1:length(train_ma.ts)]
+SSE_train.sma = sum(error_train.sma[5:length(train_ma.ts)]^2)
+MSE_train.sma = mean(error_train.sma[5:length(train_ma.ts)]^2)
+MAPE_train.sma = mean(abs((error_train.sma[5:length(train_ma.ts)]/train_ma.ts[5:length(train_ma.ts)])*100))
+
+akurasi_train.sma <- matrix(c(SSE_train.sma, MSE_train.sma, MAPE_train.sma))
+row.names(akurasi_train.sma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.sma) <- c("Akurasi m = 4")
+akurasi_train.sma
+```
+Nilai MAPE data latih pada metode pemulusan SMA kurang dari 50%, nilai ini dapat dikategorikan sebagai nilai akurasi yang sangat baik.
+
+```{r}
+#Menghitung nilai keakuratan data uji
+error_test.sma = test_ma.ts-data.gab[169:210,3]
+SSE_test.sma = sum(error_test.sma^2)
+MSE_test.sma = mean(error_test.sma^2)
+MAPE_test.sma = mean(abs((error_test.sma/test_ma.ts*100)))
+
+akurasi_test.sma <- matrix(c(SSE_test.sma, MSE_test.sma, MAPE_test.sma))
+row.names(akurasi_test.sma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.sma) <- c("Akurasi m = 4")
+akurasi_test.sma
+```
+Nilai MAPE data uji pada pemulusan SMA kurang dari 10% sehingga nilai akurasi ini dapat dikategorikan sebagai sangat baik.
+
+### Double Moving Average (DMA)
+Metode pemulusan Double Moving Average (DMA) pada dasarnya mirip dengan SMA. Namun demikian, metode ini lebih cocok digunakan untuk pola data trend.
+```{r}
+dma <- SMA(data.sma, n = 4)
+At <- 2*data.sma - dma
+Bt <- 2/(4-1)*(data.sma - dma)
+data.dma<- At+Bt
+data.ramal2<- c(NA, data.dma)
+
+t = 1:42
+f = c()
+
+for (i in t) {
+  f[i] = At[length(At)] + Bt[length(Bt)]*(i)
+}
+
+data.gab2 <- cbind(aktual = c(train_ma.ts,rep(NA,42)), pemulusan1 = c(data.sma,rep(NA,42)),pemulusan2 = c(data.dma, rep(NA,42)),At = c(At, rep(NA,42)), Bt = c(Bt,rep(NA,42)),ramalan = c(data.ramal2, f[-1]))
+data.gab2
+```
+```{r}
+#Hasil pemulusan menggunakan metode DMA
+ts.plot(data.ts, xlab="Periode Waktu", ylab="Jumlah Penumpang", main= "DMA N=4 Data KRLJabodetabek")
+points(data.ts)
+lines(data.gab2[,3],col="green",lwd=2)
+lines(data.gab2[,6],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.8)
+
+```
+
+Selanjutnya perhitungan akurasi dilakukan baik pada data latih maupun data uji. Perhitungan akurasi dilakukan dengan ukuran akurasi SSE, MSE dan MAPE.
+```{r}
+#Menghitung nilai keakuratan data latih
+error_train.dma = train_ma.ts-data.ramal2[1:length(train_ma.ts)]
+SSE_train.dma = sum(error_train.dma[8:length(train_ma.ts)]^2)
+MSE_train.dma = mean(error_train.dma[8:length(train_ma.ts)]^2)
+MAPE_train.dma = mean(abs((error_train.dma[8:length(train_ma.ts)]/train_ma.ts[8:length(train_ma.ts)])*100))
+
+akurasi_train.dma <- matrix(c(SSE_train.dma, MSE_train.dma, MAPE_train.dma))
+row.names(akurasi_train.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.dma) <- c("Akurasi m = 4")
+akurasi_train.dma
+```
+Nilai MAPE data latih pada pemulusan DMA kurang dari 50% sehingga nilai akurasi ini dapat dikategorikan sebagai sangat baik.
+
+```{r}
+#Menghitung nilai keakuratan data uji
+error_test.dma = test_ma.ts-data.gab2[169:210,6]
+SSE_test.dma = sum(error_test.dma^2)
+MSE_test.dma = mean(error_test.dma^2)
+MAPE_test.dma = mean(abs((error_test.dma/test_ma.ts*100)))
+
+akurasi_test.dma <- matrix(c(SSE_test.dma, MSE_test.dma, MAPE_test.dma))
+row.names(akurasi_test.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.dma) <- c("Akurasi m = 4")
+akurasi_test.dma
+```
+Nilai MAPE data uji pada pemulusan DMA kurang dari 10% sehingga nilai akurasi ini dapat dikategorikan sebagai sangat baik.
+
+Pada data latih, metode SMA lebih baik dibandingkan dengan metode DMA, sedangkan pada data uji, metode DMA lebih baik dibandingkan SMA
+
+## Single Exponential Smoothing & Double Exponential Smoothing
+
+### Pembagian Data
+Pembagian data latih dan data uji dilakukan dengan perbandingan 80% data latih dan 20% data uji.
+
+```{r}
+#membagi training dan testing
+training<-data[1:168,]
+testing<-data[169:210,]
+train.ts <- ts(training$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+test.ts <- ts(testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+```
+
+### Eksplorasi
+```{r}
+plot(data.ts, col="black",main="Plot semua data")
+points(data1.ts)
+
+plot(train.ts, col="blue",main="Plot data latih")
+points(train.ts)
+
+plot(test.ts, col="red",main="Plot data uji")
+points(test.ts)
+```
+```{r}
+#Eksplorasi dengan GGPLOT
+library(ggplot2)
+ggplot() + 
+  geom_line(data = training_ma, aes(x = Date, y = `Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`, col = "Data Latih")) +
+  geom_line(data = testing_ma, aes(x = Date, y = `Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`, col = "Data Uji")) +
+  labs(x = "Tahun", y = "Jumlah Penumpang", color = "Legend") +
+  scale_colour_manual(name="Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+```
+
+### Single Exponential Smoothing (SES)
+Single Exponential Smoothing merupakan metode pemulusan yang tepat digunakan untuk data dengan pola stasioner atau konstan.
+
+Nilai pemulusan pada periode ke-t didapat dari persamaan:
+$$
+\tilde{y}_T=\lambda y_t+(1-\lambda)\tilde{y}_{T-1}
+$$
+
+Nilai parameter $\lambda$ adalah nilai antara 0 dan 1.
+
+Nilai pemulusan periode ke-t bertindak sebagai nilai ramalan pada periode ke-$(T+\tau)$.
+
+$$
+\tilde{y}_{T+\tau}(T)=\tilde{y}_T
+$$
+
+Pemulusan dengan metode SES dapat dilakukan dengan dua fungsi:
+```{r}
+#Cara 1 (fungsi ses)
+ses.1 <- ses(train.ts, h = 42, alpha = 0.2)
+plot(ses.1)
+ses.1 
+
+ses.2 <- ses(train.ts, h = 42, alpha = 0.7)
+plot(ses.2)
+ses.2
+```
+
+Untuk mendapatkan gambar hasil pemulusan pada data latih dengan fungsi `ses()` , perlu digunakan fungsi `autoplot()` dan `autolayer()`.
+```{r}
+autoplot(ses.1) +
+  autolayer(fitted(ses.1), series="Fitted") +
+  ylab("Jumlah Penumpang") + xlab("Periode Waktu")
+```
+
+Pada fungsi `ses()` , terdapat beberapa argumen yang umum digunakan, yaitu nilia `y` , `gamma` , `beta` , `alpha` , dan `h` .
+
+Nilai `y` adalah nilai data deret waktu, `gamma` adalah parameter pemulusan untuk komponen musiman, `beta` adalah parameter pemulusan untuk tren, dan `alpha` adalah parameter pemulusan untuk stasioner, serta `h` adalah banyaknya periode yang akan diramalkan.
+
+Kasus di atas merupakan contoh inisialisasi nilai parameter $\lambda$ dengan nilai `alpha` 0,2 dan 0,7 dan banyak periode data yang akan diramalkan adalah sebanyak 42 periode.
+
+```{r}
+#Cara 2 (fungsi Holtwinter)
+ses1<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.2)
+plot(ses1)
+
+#ramalan
+ramalan1<- forecast(ses1, h=42)
+ramalan1
+
+ses2<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.7)
+plot(ses2)
+
+#ramalan
+ramalan2<- forecast(ses2, h=42)
+ramalan2
+```
+
+Nilai parameter $\alpha$ dari kedua fungsi dapat dioptimalkan menyesuaikan dari *error*-nya paling minimumnya. Caranya adalah dengan membuat parameter $\alpha =$ `NULL` .
+
+```{r}
+#SES
+ses.opt <- ses(train.ts, h = 42, alpha = NULL)
+plot(ses.opt)
+ses.opt
+
+#Lamda Optimum Holt Winter
+sesopt<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE,alpha = NULL)
+sesopt
+plot(sesopt)
+
+#ramalan
+ramalanopt<- forecast(sesopt, h=42)
+ramalanopt
+```
+
+#### Akurasi Data Latih
+Nilai akurasi dapat diambil dari objek yang tersimpan pada hasil SES, yaitu *sum of squared errors* (SSE). Nilai akurasi lain dapat dihitung pula dari nilai SSE tersebut.
+```{r}
+#Keakuratan Metode
+#Pada data training
+SSE1<-ses1$SSE
+MSE1<-ses1$SSE/length(train.ts)
+RMSE1<-sqrt(MSE1)
+
+akurasi1 <- matrix(c(SSE1,MSE1,RMSE1))
+row.names(akurasi1)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi1) <- c("Akurasi lamda=0.2")
+akurasi1
+
+SSE2<-ses2$SSE
+MSE2<-ses2$SSE/length(train.ts)
+RMSE2<-sqrt(MSE2)
+
+akurasi2 <- matrix(c(SSE2,MSE2,RMSE2))
+row.names(akurasi2)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi2) <- c("Akurasi lamda=0.7")
+akurasi2
+
+#Cara Manual
+fitted1<-ramalan1$fitted
+sisaan1<-ramalan1$residuals
+head(sisaan1)
+
+resid1<-training$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`-ramalan1$fitted
+head(resid1)
+```
+
+```{r}
+#Cara Manual
+SSE.1=sum(sisaan1[2:length(train.ts)]^2)
+SSE.1
+
+MSE.1 = SSE.1/length(train.ts)
+MSE.1
+
+MAPE.1 = sum(abs(sisaan1[2:length(train.ts)]/train.ts[2:length(train.ts)])*
+               100)/length(train.ts)
+MAPE.1
+
+akurasi.1 <- matrix(c(SSE.1,MSE.1,MAPE.1))
+row.names(akurasi.1)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi.1) <- c("Akurasi lamda=0.2")
+akurasi.1
+
+fitted2<-ramalan2$fitted
+sisaan2<-ramalan2$residuals
+head(sisaan2)
+
+resid2<-training$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`-ramalan2$fitted
+head(resid2)
+
+SSE.2=sum(sisaan2[2:length(train.ts)]^2)
+SSE.2
+
+MSE.2 = SSE.2/length(train.ts)
+MSE.2
+
+MAPE.2 = sum(abs(sisaan2[2:length(train.ts)]/train.ts[2:length(train.ts)])*
+               100)/length(train.ts)
+MAPE.2
+
+akurasi.2 <- matrix(c(SSE.2,MSE.2,MAPE.2))
+row.names(akurasi.2)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi.2) <- c("Akurasi lamda=0.7")
+akurasi.2
+```
+
+Berdasarkan nilai SSE, MSE, RMSE, dan MAPE di antara kedua parameter, nilai parameter $\lambda=0,7$ menghasilkan akurasi yang lebih baik dibanding $\lambda=0,2$ . Hal ini dilihat dari nilai masing-masing ukuran akurasi yang lebih kecil. Berdasarkan nilai MAPE-nya, hasil ini dapat dikategorikan sebagai peramalan sangat baik.
+
+#### Akurasi Data Uji
+```{r}
+selisih1<-ramalan1$mean-testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`
+SSEtesting1<-sum(selisih1^2)
+MSEtesting1<-SSEtesting1/length(testing)
+
+selisih2<-ramalan2$mean-testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`
+SSEtesting2<-sum(selisih2^2)
+MSEtesting2<-SSEtesting2/length(testing)
+
+selisihopt<-ramalanopt$mean-testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`
+SSEtestingopt<-sum(selisihopt^2)
+MSEtestingopt<-SSEtestingopt/length(testing)
+
+akurasitesting1 <- matrix(c(SSEtesting1,SSEtesting2,SSEtestingopt))
+row.names(akurasitesting1)<- c("SSE1", "SSE2", "SSEopt")
+akurasitesting1
+
+akurasitesting2 <- matrix(c(MSEtesting1,MSEtesting2,MSEtestingopt))
+row.names(akurasitesting2)<- c("MSE1", "MSE2", "MSEopt")
+akurasitesting2
+```
+
+Selain dengan cara di atas, perhitungan nilai akurasi dapat menggunakan fungsi `accuracy()` dari *package* `forecast` . Penggunaannya yaitu dengan menuliskan `accuracy(hasil ramalan, kondisi aktual)`
+```{r}
+#cara lain
+accuracy(ramalanopt,testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+```
+
+### DES
+Metode pemulusan *Double Exponential Smoothing* (DES) digunakan untuk data yang memiliki pola tren. Metode DES adalah metode semacam SES, hanya saja dilakukan dua kali, yaitu pertama untuk tahapan 'level' dan kedua untuk tahapan 'tren'. Pemulusan menggunakan metode ini akan menghasilkan peramalan tidak konstan untuk periode berikutnya.
+
+Pemulusan dengan metode DES kali ini akan menggunakan fungsi `HoltWinters()` . Jika sebelumnya nilai argumen `beta` dibuat `FALSE` , kali ini argumen tersebut akan diinisialisasi bersamaan dengan nilai `alpha`.
+```{r}
+#Lamda=0.2 dan gamma=0.2
+des.1<- HoltWinters(train.ts, gamma = FALSE, beta = 0.2, alpha = 0.2)
+plot(des.1)
+
+#ramalan
+ramalandes1<- forecast(des.1, h=42)
+ramalandes1
+
+#Lamda=0.6 dan gamma=0.3
+des.2<- HoltWinters(train.ts, gamma = FALSE, beta = 0.3, alpha = 0.6)
+plot(des.2)
+
+#ramalan
+ramalandes2<- forecast(des.2, h=42)
+ramalandes2
+```
+
+#Membandingkan plot data latih dan data uji
+```{r}
+#Visually evaluate the prediction
+plot(data.ts)
+lines(des.1$fitted[,1], lty=2, col="blue")
+lines(ramalandes1$mean, col="red")
+```
+
+Untuk mendapatkan nilai parameter optimum dari DES, argumen `alpha` dan `beta` dapat dibuat `NULL`.
+```{r}
+#Lamda dan gamma optimum
+des.opt<- HoltWinters(train.ts, gamma = FALSE)
+des.opt
+plot(des.opt)
+
+#ramalan
+ramalandesopt<- forecast(des.opt, h=42)
+ramalandesopt
+```
+
+#### Akurasi Data Latih
+```{r}
+#Akurasi Data Training
+ssedes.train1<-des.1$SSE
+msedes.train1<-ssedes.train1/length(train.ts)
+sisaandes1<-ramalandes1$residuals
+head(sisaandes1)
+
+mapedes.train1 <- sum(abs(sisaandes1[3:length(train.ts)]/train.ts[3:length(train.ts)])
+                      *100)/length(train.ts)
+
+akurasides.1 <- matrix(c(ssedes.train1,msedes.train1,mapedes.train1))
+row.names(akurasides.1)<- c("SSE", "MSE", "MAPE")
+colnames(akurasides.1) <- c("Akurasi lamda=0.2 dan gamma=0.2")
+akurasides.1
+
+ssedes.train2<-des.2$SSE
+msedes.train2<-ssedes.train2/length(train.ts)
+sisaandes2<-ramalandes2$residuals
+head(sisaandes2)
+
+mapedes.train2 <- sum(abs(sisaandes2[3:length(train.ts)]/train.ts[3:length(train.ts)])
+                      *100)/length(train.ts)
+
+akurasides.2 <- matrix(c(ssedes.train2,msedes.train2,mapedes.train2))
+row.names(akurasides.2)<- c("SSE", "MSE", "MAPE")
+colnames(akurasides.2) <- c("Akurasi lamda=0.6 dan gamma=0.3")
+akurasides.2
+```
+
+Hasil akurasi dari data latih didapatkan skenario 2 dengan lamda=0.6 dan gamma=0.3 memiliki hasil yang lebih baik. Namun untuk kedua skenario dapat dikategorikan peramalan sangat baik berdasarkan nilai MAPE-nya.
+
+#### Akurasi Data Uji
+```{r}
+#Akurasi Data Testing
+selisihdes1<-ramalandes1$mean-testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`
+selisihdes1
+
+SSEtestingdes1<-sum(selisihdes1^2)
+MSEtestingdes1<-SSEtestingdes1/length(testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+MAPEtestingdes1<-sum(abs(selisihdes1/testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)*100)/length(testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+
+selisihdes2<-ramalandes2$mean-testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`
+selisihdes2
+
+SSEtestingdes2<-sum(selisihdes2^2)
+MSEtestingdes2<-SSEtestingdes2/length(testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+MAPEtestingdes2<-sum(abs(selisihdes2/testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)*100)/length(testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+
+selisihdesopt<-ramalandesopt$mean-testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`
+selisihdesopt
+
+SSEtestingdesopt<-sum(selisihdesopt^2)
+MSEtestingdesopt<-SSEtestingdesopt/length(testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+MAPEtestingdesopt<-sum(abs(selisihdesopt/testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)*100)/length(testing$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+
+akurasitestingdes <-
+  matrix(c(SSEtestingdes1,MSEtestingdes1,MAPEtestingdes1,SSEtestingdes2,MSEtestingdes2,
+           MAPEtestingdes2,SSEtestingdesopt,MSEtestingdesopt,MAPEtestingdesopt),
+         nrow=3,ncol=3)
+row.names(akurasitestingdes)<- c("SSE", "MSE", "MAPE")
+colnames(akurasitestingdes) <- c("des ske1","des ske2","des opt")
+akurasitestingdes
+```
+
+#### Perbandingan SES dan DES
+```{r}
+MSEfull <-
+  matrix(c(MSEtesting1,MSEtesting2,MSEtestingopt,MSEtestingdes1,MSEtestingdes2,
+           MSEtestingdesopt),nrow=3,ncol=2)
+row.names(MSEfull)<- c("ske 1", "ske 2", "ske opt")
+colnames(MSEfull) <- c("ses","des")
+MSEfull
+```
+Kedua metode dapat dibandingkan dengan menggunakan ukuran akurasi yang sama. Contoh di atas adalah perbandingan kedua metode dengan ukuran akurasi MSE. Hasilnya didapatkan metode DES lebih baik dibandingkan metode SES dilihat dari MSE yang lebih kecil nilainya.
+
+## Pemulusan Data Musiman
+```{r}
+#Import data
+library(rio)
+data <- import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Pertemuan%201/Data%20Prak%201.xlsx")
+data
+data.ts <- ts(data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+```
+#Mengubah format Tanggal dan Jumlah
+```{r}
+data$Date <- as.Date(data$Date, format="%Y-%m-%d")
+data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)` <- as.numeric(data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+str(data$Date);str(data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+```
+
+```{r}
+#membagi data menjadi training dan testing
+training<-data[1:168,2]
+testing<-data[169:210,2]
+#data bulanan -> pola tahunan -> freq = 12
+training.ts<-ts(training, frequency = 12)
+testing.ts<-ts(testing, frequency = 12)
+```
+
+Kemudian akan dilakukan eskplorasi dengan plot data deret waktu sebagai berikut.
+
+```{r}
+#Membuat plot time series
+plot(data.ts, col="black",main="Plot semua data")
+points(data.ts)
+
+plot(training.ts, col="blue",main="Plot data latih")
+points(training.ts)
+
+plot(testing.ts, col="red",main="Plot data uji")
+points(testing.ts)
+```
+
+Metode Holt-Winter untuk peramalan data musiman menggunakan tiga persamaan pemulusan yang terdiri atas persamaan untuk level $(L_t)$, trend $(B_t)$, dan komponen seasonal / musiman $(S_t)$ dengan parameter pemulusan berupa $\alpha$, $\beta$, dan $\gamma$. Metode Holt-Winter musiman terbagi menjadi dua, yaitu metode aditif dan metode multiplikatif. 
+
+Pemulusan data musiman dengan metode Winter dilakukan menggunakan fungsi `HoltWinters()` dengan memasukkan argumen tambahan, yaitu `gamma()` dan `seasonal()` . Arguman `seasonal()` diinisialisasi menyesuaikan jenis musiman, aditif atau multiplikatif.
+
+### Winter Aditif
+Perhitungan dengan model aditif dilakukan jika plot data asli menunjukkan fluktuasi musiman yang relatif stabil (konstan).
+```{r}
+#Pemulusan dengan winter aditif 
+winter1 <- HoltWinters(training.ts,alpha=0.2,beta=0.1,gamma=0.1,seasonal = "additive")
+winter1$fitted
+xhat1 <- winter1$fitted[,2]
+
+winter1.opt<- HoltWinters(training.ts, alpha= NULL,  beta = NULL, gamma = NULL, seasonal = "additive")
+winter1.opt
+winter1.opt$fitted
+xhat1.opt <- winter1.opt$fitted[,2]
+```
+
+#### Peramalan
+```{r}
+#Forecast
+forecast1 <- predict(winter1, n.ahead = 42)
+forecast1.opt <- predict(winter1.opt, n.ahead = 42)
+```
+
+#### Plot Deret Waktu
+```{r}
+#Plot time series
+plot(training.ts,main="Winter 0.2;0.1;0.1",type="l",col="black",
+     xlim=c(1,18),pch=12)
+lines(xhat1,type="l",col="red")
+lines(xhat1.opt,type="l",col="blue")
+lines(forecast1,type="l",col="red")
+lines(forecast1.opt,type="l",col="blue")
+legend("topleft",c("Actual Data",expression(paste(winter1)),
+                   expression(paste(winter1.opt))),cex=0.5,
+       col=c("black","red","blue"),lty=1)
+```
+
+#### Akurasi Data Latih
+```{r}
+#Akurasi data training
+SSE1<-winter1$SSE
+MSE1<-winter1$SSE/length(training.ts)
+RMSE1<-sqrt(MSE1)
+akurasi1 <- matrix(c(SSE1,MSE1,RMSE1))
+row.names(akurasi1)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi1) <- c("Akurasi")
+akurasi1
+
+SSE1.opt<-winter1.opt$SSE
+MSE1.opt<-winter1.opt$SSE/length(training.ts)
+RMSE1.opt<-sqrt(MSE1.opt)
+akurasi1.opt <- matrix(c(SSE1.opt,MSE1.opt,RMSE1.opt))
+row.names(akurasi1.opt)<- c("SSE1.opt", "MSE1.opt", "RMSE1.opt")
+colnames(akurasi1.opt) <- c("Akurasi")
+akurasi1.opt
+
+akurasi1.train = data.frame(Model_Winter = c("Winter 1","Winter1 optimal"),
+                            Nilai_SSE=c(SSE1,SSE1.opt),
+                            Nilai_MSE=c(MSE1,MSE1.opt),Nilai_RMSE=c(RMSE1,RMSE1.opt))
+akurasi1.train
+```
+
+#### Akurasi Data Uji
+```{r}
+#Akurasi Data Testing
+forecast1<-data.frame(forecast1)
+testing.ts<-data.frame(testing.ts)
+selisih1<-forecast1-testing.ts
+SSEtesting1<-sum(selisih1^2)
+MSEtesting1<-SSEtesting1/length(testing.ts)
+
+forecast1.opt<-data.frame(forecast1.opt)
+selisih1.opt<-forecast1.opt-testing.ts
+SSEtesting1.opt<-sum(selisih1.opt^2)
+MSEtesting1.opt<-SSEtesting1.opt/length(testing.ts)
+```
+
+### Winter Multiplikatif
+Model multiplikatif digunakan cocok digunakan jika plot data asli menunjukkan fluktuasi musiman yang bervariasi.
+
+#### Pemulusan
+```{r}
+#Pemulusan dengan winter multiplikatif 
+winter2 <- HoltWinters(training.ts,alpha=0.2,beta=0.1,gamma=0.3,seasonal = "multiplicative")
+winter2$fitted
+xhat2 <- winter2$fitted[,2]
+
+winter2.opt<- HoltWinters(training.ts, alpha= NULL,  beta = NULL, gamma = NULL, seasonal = "multiplicative")
+winter2.opt$fitted
+xhat2.opt <- winter2.opt$fitted[,2]
+```
+
+#### Peramalan
+```{r}
+#Forecast
+forecast2 <- predict(winter2, n.ahead = 42)
+forecast2.opt <- predict(winter2.opt, n.ahead = 42)
+```
+
+#### Plot Deret Waktu
+```{r}
+#Plot time series
+plot(training.ts,main="Winter 0.2;0.1;0.1",type="l",col="black",
+     xlim=c(1,18),pch=12)
+lines(xhat2,type="l",col="red")
+lines(xhat2.opt,type="l",col="blue")
+lines(forecast2,type="l",col="red")
+lines(forecast2.opt,type="l",col="blue")
+legend("topleft",c("Actual Data",expression(paste(winter2)),
+                   expression(paste(winter2.opt))),cex=0.5,
+       col=c("black","red","blue"),lty=1)
+```
+
+#### Akurasi Data Latih
+```{r}
+#Akurasi data training
+SSE2<-winter2$SSE
+MSE2<-winter2$SSE/length(training.ts)
+RMSE2<-sqrt(MSE2)
+akurasi1 <- matrix(c(SSE2,MSE2,RMSE2))
+row.names(akurasi1)<- c("SSE2", "MSE2", "RMSE2")
+colnames(akurasi1) <- c("Akurasi lamda=0.2")
+akurasi1
+
+SSE2.opt<-winter2.opt$SSE
+MSE2.opt<-winter2.opt$SSE/length(training.ts)
+RMSE2.opt<-sqrt(MSE2.opt)
+akurasi1.opt <- matrix(c(SSE2.opt,MSE2.opt,RMSE2.opt))
+row.names(akurasi1.opt)<- c("SSE2.opt", "MSE2.opt", "RMSE2.opt")
+colnames(akurasi1.opt) <- c("Akurasi")
+akurasi1.opt
+
+akurasi2.train = data.frame(Model_Winter = c("Winter 1","winter2 optimal"),
+                            Nilai_SSE=c(SSE2,SSE2.opt),
+                            Nilai_MSE=c(MSE2,MSE2.opt),Nilai_RMSE=c(RMSE2,RMSE2.opt))
+akurasi2.train
+```
+
+#### Akurasi Data Uji
+```{r}
+#Akurasi Data Testing
+forecast2<-data.frame(forecast2)
+testing.ts<-data.frame(testing.ts)
+selisih2<-forecast2-testing.ts
+SSEtesting2<-sum(selisih2^2)
+MSEtesting2<-SSEtesting2/length(testing.ts)
+MSEtesting2
+
+forecast2.opt<-data.frame(forecast2.opt)
+selisih2.opt<-forecast2.opt-testing.ts
+SSEtesting2.opt<-sum(selisih2.opt^2)
+MSEtesting2.opt<-SSEtesting2.opt/length(testing.ts)
+MSEtesting2.opt
+
+```
