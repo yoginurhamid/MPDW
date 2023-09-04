@@ -863,4 +863,4 @@ akurasi_winteraditif
 ```{r}
 akurasi_wintermultiplikatif
 ```
-Berdasarkan akurasi data uji (testing) di atas, dapat dikatakan bahwa metode pemulusan terbaik untuk data jumlah penumpang KRL Jabodetabek yaitu metode sma, dma, winter aditif, dan winter multiplikatif.
+Berdasarkan akurasi data uji (testing) di atas, dapat dikatakan bahwa metode pemulusan terbaik untuk data jumlah penumpang KRL Jabodetabek yaitu metode sma dan dma.
