@@ -641,10 +641,18 @@ data1
 data1.ts <- ts(data1$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
 ```
 
+Mengubah format Tanggal dan Jumlah
+
+```{r}
+data1$Date <- as.Date(data1$Date, format="%Y-%m-%d")
+data1$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)` <- as.numeric(data1$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+str(data1$Date);str(data1$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+```
+
 ```{r}
 #membagi data menjadi training dan testing
-training<-data3[1:168,2]
-testing<-data3[169:210,2]
+training<-data1[1:168,2]
+testing<-data1[169:210,2]
 #data bulanan -> pola tahunan -> freq = 12
 training.ts<-ts(training, frequency = 12)
 testing.ts<-ts(testing, frequency = 12)
