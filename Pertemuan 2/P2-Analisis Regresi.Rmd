@@ -1,10 +1,10 @@
 ---
-title: "Pertemuan 1 - Pemulusan"
+title: "Pertemuan 2 - Regresi"
 author:Yogi Nur Hamid
 output:
   html_document: default
   pdf_document: default
-  word_document: default
+  word_docusment: default
 ---
 
 ```{r setup, include=FALSE}
