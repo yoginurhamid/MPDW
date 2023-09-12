@@ -1,1 +1,391 @@
+---
+title: "Pertemuan 1 - Pemulusan"
+author:Yogi Nur Hamid
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Pemanggilan *Packages*
+
+```{r}
+library(dplyr)
+library(TTR)
+library(forecast)
+library(lmtest) #digunakan untuk uji formal pendeteksian autokorelasi
+library(orcutt) #untuk membuat model regresi Cochrane-Orcutt
+library(HoRM) #untuk membuat model regresi Hildreth-Lu
+library(corrplot)
+```
+
+## Input Data
+
+```{r}
+data <- read.csv("C:/Users/ASUS/OneDrive/Documents/sem 5/Metode Peramalan Deret Waktu/BAJFINANCE.csv")
+data
+str(data)
+```
+
+#Mengubah format Tanggal
+
+```{r}
+date <- as.Date(data$date, format="%m/%d/%Y")
+date <- substr(date, 1,4)
+date
+```
+
+#Membuat dataframe yang diperlukan
+
+Data yang digunakan dalam kesempatan kali ini adalah data Bajaj Finance Periode 2021.
+
+```{r}
+#Peubah yang digunakan
+volume <- data$volume #sebagai Y
+high <- data$high #Sebagai X1
+low <- data$low #Sebagai X2
+atr <- data$ATR #Sebagai X3
+trange <- data$Trange #Sebagai X4
+
+#Menggabungkan data
+datagab <- cbind.data.frame(date,volume,high,low,atr,trange)
+
+#Ambil data periode 2022 saja
+datagab <- datagab[date == "2021",]
+datagab
+```
+
+#Tanpa kolom date
+```{r}
+datagab2 <- datagab[,-1]
+datagab2
+```
+
+# Mengubah data menjadi data deret waktu
+```{r}
+volume.ts <- ts(datagab2$volume)
+high.ts <- ts(datagab2$high)
+low.ts <- ts(datagab2$low)
+atr.ts <- ts(datagab2$atr)
+trange.ts <- ts(datagab2$trange)
+```
+
+# Eksplorasi data
+```{r}
+# scatter plot volume vs high
+plot(datagab2$high, datagab2$volume, pch = 20, col = "blue",
+     main = "Scatter Plot Volume vs High",
+     xlab = "High",
+     ylab = "Volume")
+
+# scatter plot Volume vs low
+plot(datagab2$low,datagab$volume, pch = 20, col = "blue",
+     main = "Scatter Plot Volume vs Low",
+     xlab = "Low",
+     ylab = "Volume")
+
+# scatter plot Volume vs ATR
+plot(datagab2$atr,datagab2$low, pch = 20, col = "blue",
+     main = "Scatter Plot Volume vs ATR",
+     xlab = "ATR",
+     ylab = "Volume")
+
+# scatter plot Volume vs Trange
+plot(datagab2$trange,datagab2$volume, pch = 20, col = "blue",
+     main = "Scatter Plot Volume vs Trange",
+     xlab = "Trange",
+     ylab = "Volume")
+```
+```{r}
+# Cek Korelasi
+matriks <- cor(datagab2)
+corrplot.mixed(matriks, upper = 'circle', lower = 'number', order = "original",
+               tl.col="black", tl.pos = "lt",diag = 'l',
+               number.digits=2, number.cex=1)
+```
+
+# Plot time series
+
+```{r}
+## Volume
+ts.plot(volume.ts, xlab="Time Period ", ylab="Volume", 
+        main = "Time Series Plot")
+points(volume.ts)
+
+## High
+ts.plot(high.ts, xlab="Time Period ", ylab="High", 
+        main = "Time Series Plot")
+points(high.ts)
+
+## Low
+ts.plot(low.ts, xlab="Time Period ", ylab="Low", 
+        main = "Time Series Plot")
+points(low.ts)
+
+## ATR
+ts.plot(atr.ts, xlab="Time Period ", ylab="ATR", 
+        main = "Time Series Plot")
+points(atr.ts)
+
+## Trange
+ts.plot(trange.ts, xlab="Time Period ", ylab="Trange", 
+        main = "Time Series Plot")
+points(trange.ts)
+```
+
+# Pembuatan regresi time series
+```{r}
+## Pembuatan model awal
+model1 <- lm(datagab2$volume ~ datagab2$high + datagab2$low + datagab2$atr + datagab2$trange)
+summary(model1)
+```
+
+Model yang dihasilkan adalah $$y_i=5462897.1-1533.11_t+711.8x2_t+1547.3x3_t+8260x4_t$$
+
+
+Berdasarkan ringkasan model dapat diketahui bahwa hasil uji F memiliki $$p-value <\alpha$$ alpha 5%
+Artinya, dalam taraf 5% minimal terdapat satu peubah bebas yang berpengaruh nyata terhadap model.
+
+
+Hasil uji-t parsial parameter regresi, yaitu koefisien regresi data trange menunjukkan hal yang sama, yaitu memiliki $$t-value < \alpha$$ alpha 5%.
+Artinya, dalam taraf nyata 5% peubah Trange memiliki pengaruh yang signifikan terhadap model.
+
+Selanjutnya dapat dilihat juga nilai $$R^2=0.6255$$
+Artinya, sebesar 62% keragaman nilai volume dapat dijelaskan oleh peubah-peubah tersebut. Namun, kita perlu melakukan uji terhadap sisaannya seperti berikut ini.
+
+# plot asumsi
+```{r}
+#sisaan dan fitted value
+sisaan1<- residuals(model1)
+fitValue1<- predict(model1)
+
+#Diagnostik dengan eksploratif
+par(mfrow = c(2,2))
+qqnorm(sisaan1)
+qqline(sisaan1, col = "steelblue", lwd = 2)
+plot(fitValue1, sisaan1, col = "steelblue", pch = 20, xlab = "Sisaan", ylab = "Fitted Values", main = "Sisaan vs Fitted Values")
+abline(a = 0, b = 0, lwd = 2)
+hist(sisaan1, col = "steelblue")
+plot(seq(1,248,1), sisaan1, col = "steelblue", pch = 20, xlab = "Sisaan", ylab = "Order", main = "Sisaan vs Order")
+lines(seq(1,248,1), sisaan1, col = "red")
+abline(a = 0, b = 0, lwd = 2)
+```
+Dua plot di samping kiri digunakan untuk melihat apakah sisaan menyebar normal. Normal Q-Q Plot di atas menunjukkan bahwa sisaan cenderung tidak menyebar normal, dan histogram dari sisaan menunjukkan demikian. Selanjutnya, dua plot di samping kanan digunakan untuk melihat autokorelasi. Plot Sisaan vs *Fitted Value* dan Plot Sisaan vs *Order* menunjukkan adanya pola pada sisaan. Untuk lebih lanjut akan digunakan uji formal melihat normalitas sisaan dan plot ACF dan PACF untuk melihat apakah ada autokorelasi atau tidak.
+
+# Uji formal Normalitas
+
+```{r}
+#H0: sisaan menyebar normal
+#H1: sisaan tidak menyebar normal
+ks.test(sisaan1, "pnorm", mean=mean(sisaan1), sd=sd(sisaan1))
+```
+Berdasarkan uji formal Kolmogorov-Smirnov didapatkan nilai $$p-value<\alpha$$ (5%).
+Tolak H0. Artinya, belum cukup bukti untuk menyatakan sisaan berdistribusi normal.
+
+# Transformasi karna data tidak normal (1/x dan 1/y)
+```{r}
+volume.trans <- 1/(datagab2$volume)
+high.trans <- 1/(datagab2$high)
+low.trans <- 1/(datagab2$low)
+atr.trans <- 1/(datagab2$atr)
+trange.trans <- 1/(datagab2$trange)
+# Model transformasi
+model2 <- lm(volume.trans ~ high.trans +low.trans + atr.trans + trange.trans)
+summary(model2)
+```
+
+Model transforasi yang dihasilkan adalah $$y_i=(2.579e-06)-(1.363e-01)x1_t+(1.177e-01)x2_t-(1.548e-04)x3_t+(2.261e-04)x4_t$$
+
+Berdasarkan ringkasan model dapat diketahui bahwa hasil uji F memiliki $$p-value < \alpha$$ (5%). 
+Artinya, dalam taraf nyata 5% minimal terdapat satu peubah bebas yang berpengaruh nyata terhadap model.
+
+Hasil uji-t parsial parameter regresi, yaitu koefisien regresi juga menunjukkan hal yang sama, yaitu memiliki $$t-value < \alpha$$ (5%)
+Artinya, dalam taraf nyata 5% peubah bebas berpengaruh nyata terhadap model.
+
+Selanjutnya dapat dilihat juga nilai $$R^2=0.4526$$.
+Artinya, sebesar 45% keragaman nilai volume dapat dijelaskan oleh peubah high, low, atr, dan trange. Namun, kita perlu melakukan uji terhadap sisaannya seperti berikut ini.
+
+# cek ulang normalitas
+```{r}
+#sisaan dan fitted value
+sisaan1<- residuals(model2)
+fitValue1<- predict(model2)
+
+#Diagnostik dengan eksploratif
+par(mfrow = c(2,2))
+qqnorm(sisaan1)
+qqline(sisaan1, col = "steelblue", lwd = 2)
+plot(fitValue1, sisaan1, col = "steelblue", pch = 20, xlab = "Sisaan", ylab = "Fitted Values", main = "Sisaan vs Fitted Values")
+abline(a = 0, b = 0, lwd = 2)
+hist(sisaan1, col = "steelblue")
+plot(seq(1,248,1), sisaan1, col = "steelblue", pch = 20, xlab = "Sisaan", ylab = "Order", main = "Sisaan vs Order")
+lines(seq(1,248,1), sisaan1, col = "red")
+abline(a = 0, b = 0, lwd = 2)
+```
+Dua plot di samping kiri digunakan untuk melihat apakah sisaan menyebar normal. Normal Q-Q Plot di atas menunjukkan bahwa sisaan cenderung menyebar normal, dan histogram dari sisaan menunjukkan demikian.
+
+
+# Uji Formal normalitas
+```{r}
+#H0: sisaan mengikuti sebaran normal
+#H1: sisaan tidak mengikuti sebaran normal
+ks.test(sisaan1, "pnorm", mean=mean(sisaan1), sd=sd(sisaan1))
+```
+Berdasarkan uji formal Kolmogorov-Smirnov didapatkan nilai $$p-value < \alpha$$ (5%).
+Tak Tolak H0. Artinya, cukup bukti untuk menyatakan sisaan berdistribusi normal.
+
+# ACF dan PACF identifikasi autokorelasi
+```{r}
+par(mfrow = c(1,2))
+acf(sisaan1)
+pacf(sisaan1)
+```
+Berdasarkan plot ACF dan PACF, terlihat terdapat data yang berada diluar rentang batas sehingga terdapat autokorelasi. Namun, untuk lebih memastikan akan dilakukan uji formal dengan uji Durbin Watson.
+
+
+# Uji formal autokorelasi
+```{r}
+#H0: tidak ada autokorelasi
+#H1: ada autokorelasi
+dwtest(model2)
+```
+Berdasarkan hasil DW Test, didapatkan nilai $$DW = 1.6646$$.
+dan $$p-value = 0.006793$$.
+Dengan nilai $$p-value< 0.05$$.
+Tolak H0. Artinya, cukup bukti mengatakan adanya autokorelasi. Oleh karena itu, diperlukan penangan autokorelasi. Penanganan yang akan digunakan menggunakan dua metode, yaitu Cochrane-Orcutt dan Hildret-Lu.
+
+# Penanganan Autokorelasi
+
+#Penanganan Autokorelasi Metode Cochrane-Orcutt
+```{r}
+#H0:Terdapat autokorelasi
+#H2:Tidak terdapat autokorelasi
+model.CO<-cochrane.orcutt(model2)
+model.CO
+model.CO$coefficients
+```
+Hasil keluaran model setelah dilakukan penanganan adalah sebagai berikut. $$y_i=0.000003-0.135893x1_t+0.117431x2_t-0.000153x3_t+0.000226x4_t$$
+Hasil juga menunjukkan bahwa nilai DW dan p-value meningkat menjadi $2.01755$ dan $4.988e-01$.
+Dengan nilai $$p-value > 0.05$$
+Tolak H0. Artinya, pada taraf nyata 5% belum cukup bukti menyatakan bahwa sisaan terdapat autokorelasi.
+
+Untuk nilai $ρ ̂$ optimum yang digunakan adalah $0.06914128$. Nilai tersebut dapat diketahui dengan *syntax* berikut.
+```{r}
+#Rho optimum
+rho1<- model.CO$rho
+rho1
+```
+
+## Transformasi manual
+
+```{r}
+#Transformasi Manual
+volume.trans2<- volume.trans[-1]-volume.trans[-248]*rho1
+high.trans2<- high.trans[-1]-high.trans[-248]*rho1
+low.trans2<- low.trans[-1]-low.trans[-248]*rho1
+atr.trans2<- atr.trans[-1]-atr.trans[-248]*rho1
+trange.trans2<- trange.trans[-1]-trange.trans[-248]*rho1
+model.CO.manual<- lm(volume.trans2 ~ high.trans2 + low.trans2 + atr.trans2 + trange.trans2)
+summary(model.CO.manual)
+```
+
+```{r}
+#Mencari Penduga Koefisien Regresi setelah Transformasi ke Persamaan Awal
+b0bintang <- model.CO.manual$coefficients[1]
+b0<- b0bintang/(1-rho1)
+b0
+b1<- model.CO.manual$coefficients[2]
+b1
+b2<- model.CO.manual$coefficients[3]
+b2
+b3<- model.CO.manual$coefficients[4]
+b3
+b4<- model.CO.manual$coefficients[5]
+b4
+```
+
+#Penanganan Autokorelasi Metode Hildreth-Lu
+```{r}
+hildreth.lu.func<- function(r, model){
+  x1 <- model.matrix(model)[,2]
+  x2 <- model.matrix(model)[,3]
+  x3 <- model.matrix(model)[,4]
+  x4 <- model.matrix(model)[,5]
+  y <- model.response(model.frame(model))
+  n <- length(y)
+  t <- 2:n
+  y <- y[t]-r*y[t-1]
+  x1 <- x1[t]-r*x1[t-1]
+  x2 <- x2[t]-r*x2[t-1]
+  x3 <- x3[t]-r*x3[t-1]
+  x4 <- x4[t]-r*x4[t-1]
+  
+  return(lm(y~x1+x2+x3+x4))
+}
+```
+
+```{r}
+#Pencariab rho yang meminimumkan SSE
+r <- c(seq(0.1,0.9, by= 0.1))
+tab <- data.frame("rho" = r, "SSE" = sapply(r, function(i){deviance(hildreth.lu.func(i, model2))}))
+tab
+```
+
+Pertama-tama akan dicari di mana kira-kira $ρ$ yang menghasilkan SSE minimum. Pada hasil di atas terlihat $ρ$ minimum ketika 0.1. Namun, hasil tersebut masih kurang teliti sehingga akan dicari kembali $ρ$ yang lebih optimum dengan ketelitian yang lebih. Jika sebelumnya jarak antar $ρ$ yang dicari adalah 0.1, kali ini jarak antar $ρ$ adalah 0.001 dan dilakukan pada selang 0.1 sampai dengan 0.4.
+
+```{r}
+r.opt<- seq(0.1,0.4, by= 0.001)
+tab.opt <- data.frame("rho" = r.opt, "SSE" = sapply(r.opt, function(i){deviance(hildreth.lu.func(i, model2))}))
+tab.opt[order(tab.opt$SSE),]
+tab.opt[tab.opt$SSE == min(tab.opt$SSE),]
+```
+
+```{r}
+#Grafik SSE optimum
+par(mfrow = c(1,1))
+plot(tab$SSE ~ tab$rho , type = "l", xlab = "Rho", ylab = "SSE")
+abline(v = tab.opt[tab.opt$SSE==min(tab.opt$SSE),"rho"], lty = 2, col="red",lwd=2)
+text(x=0.1, y=7.515188e-11		, labels = "rho=0.1", cex = 0.8)
+```
+
+Perhitungan yang dilakukan aplikasi `R` menunjukkan bahwa nilai $ρ$ optimum, yaitu saat SSE terkecil terdapat pada nilai $ρ=0.100$. Hal tersebut juga ditunjukkan pada plot. Selanjutnya, model dapat didapatkan dengan mengevaluasi nilai $ρ$ ke dalam fungsi `hildreth.lu.func`, serta dilanjutkan dengan pengujian autokorelasi dengan uji Durbin-Watson. Namun, setelah pengecekan tersebut tidak lupa koefisien regresi tersebut digunakan untuk transformasi balik. Persamaan hasil transformasi itulah yang menjadi persamaan sesungguhnya.
+
+```{r}
+#Model terbaik
+model.HL <- hildreth.lu.func(0.100, model2)
+summary(model.HL)
+
+#Transformasi Balik
+cat("y = ", coef(model.HL)[1]/(1-0.100), coef(model.HL)[2],"x1","+", coef(model.HL)[3],"x2", coef(model.HL)[4],"x3", "+", coef(model.HL)[5], "x4",sep = "")
+```
+
+Setelah dilakukan tranformasi balik, didapatkan model dengan metode Hildreth-Lu sebagai berikut. $$y_i=(2.555798e-06)-(0.135709)x1_t+(0.1172652)x2_t-(0.0001520892)x3_t+(0.0002256425)x4_t$$
+
+```{r}
+#Deteksi autokorelasi
+dwtest(model.HL)
+```
+Hasil uji Durbin-Watson juga menunjukkan bahwa *p-value* sebesar $0.7092$, di mana $$p-value > \alpha$$. Tolak H0. Artinya, pada taraf nyata 5% belum cukup bukti menyatakan bahwa ada autokorelasi dalam data nilai volume dengan metode Hildreth-Lu.
+
+# Perbandingan keakuratan
+```{r}
+sseModelawal <- anova(model2)$`Sum Sq`[c(5)]
+sseModelCO <- anova(model.CO.manual)$`Sum Sq`[c(5)]
+sseModelHL <- anova(model.HL)$`Sum Sq`[c(5)]
+mseModelawal <- sseModelawal/length(volume.trans)
+mseModelCO <- sseModelCO/length(volume.trans)
+mseModelHL <- sseModelHL/length(volume.trans)
+akurasi <- matrix(c(sseModelawal,sseModelCO,sseModelHL,
+                    mseModelawal,mseModelCO,mseModelHL),nrow=2,ncol=3,byrow = T)
+colnames(akurasi) <- c("Model_Awal", "Model_Cochrane-Orcutt", "Model_Hildreth-Lu")
+row.names(akurasi) <- c("SSE","MSE")
+akurasi
+```
+
+# Simpulan
+
+Autokorelasi yang terdapat pada data Volume terjadi akibat adanya korelasi di antara unsur penyusunnya. Adanya autokorelasi menyebabkan model regresi kurang baik karena akan meingkatkan galatnya. Autokorelasi dapat dideteksi secara eksploratif melalui plot sisaan, ACF, dan PACF, serta dengan uji formal Durbin-Watson. Penanganan autokorelasi dapat dilakukan dengan metode Cochrane-Orcutt dan Hildreth-Lu. Kedua metode menghasilkan nilai SSE yang sama, artinya keduanya baik untuk digunakan
