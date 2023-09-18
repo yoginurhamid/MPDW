@@ -1,1 +1,290 @@
+---
+title: "Pertemuan 3 - Regresi dengan Peubah Lag"
+author: "G1401211043_Yogi Nur Hamid"
+output:
+  html_document:
+    theme: yeti
+    toc: true
+    toc_float: true
+  word_document: default
+  pdf_document: default
+---
 
+## *Packages*
+
+```{r, echo=FALSE}
+#PACKAGES
+#install.packages("dLagM") #install jika belum ada
+#install.packages("dynlm") #install jika belum ada
+#install.packages("MLmetrics") #install jika belum ada
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+library(lmtest)
+library(car)
+```
+
+## Impor Data
+
+```{r}
+data <- rio::import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Pertemuan%203/Californa_Wine_Production_1980_2020.csv")
+str(data)
+data
+```
+#Merapihkan data 
+```{r}
+#Mengambil data daerah Fresno
+data <- data[data$County == "Fresno",]
+
+#Membalik data sesuai urutan tahun terlama
+flip <- function(data){
+  new <- data[rev(rownames(data)),]
+  rownames(new) <- NULL
+  new
+}
+data <- flip(data)
+
+#Mengambil data yang digunakan
+t <- data$Year
+Xt <- data$Production
+Yt <- data$`Price(Dollars/Unit)`
+
+#Menggabungkan data
+data.lag <- cbind.data.frame(t,Yt,Xt)
+data.lag
+```
+
+
+## Pembagian Data
+
+```{r}
+#SPLIT DATA
+train<-data.lag[1:33,]
+test<-data.lag[34:41,]
+```
+
+```{r}
+#data time series
+train.ts<-ts(train)
+test.ts<-ts(test)
+data.ts<-ts(data.lag)
+```
+
+## Model Koyck
+
+Model Koyck didasarkan pada asumsi bahwa semakin jauh jarak lag peubah independen dari periode sekarang maka semakin kecil pengaruh peubah lag terhadap peubah dependen.
+
+Koyck mengusulkan suatu metode untuk menduga model dinamis distributed lag dengan mengasumsikan bahwa semua koefisien $\beta$ mempunyai tanda sama.
+
+Model kyock merupakan jenis paling umum dari model infinite distributed lag dan juga dikenal sebagai geometric lag
+
+$$
+y_t=a(1-\lambda)+\beta_0X_t+\beta_1Z_t+\lambda Y_{t-1}+V_t
+$$
+
+dengan $$V_t=u_t-\lambda u_{t-1}$$
+
+### Pemodelan
+
+Pemodelan model Koyck dengan `R` dapat menggunakan `dLagM::koyckDlm()` . Fungsi umum dari `koyckDlm` adalah sebagai berikut.
+
+```{r, eval=FALSE, message = FALSE, warning=FALSE, error=FALSE}
+koyckDlm(x , y , intercept)
+```
+
+Fungsi `koyckDlm()` akan menerapkan model lag terdistribusi dengan transformasi Koyck satu prediktor. Nilai `x` dan `y` tidak perlu sebagai objek *time series* (`ts`). `intercept` dapat dibuat `TRUE` untuk memasukkan intersep ke dalam model.
+
+```{r}
+#MODEL KOYCK
+model.koyck <- koyckDlm(x = train$Xt, y = train$Yt)
+summary(model.koyck)
+AIC(model.koyck)
+BIC(model.koyck)
+```
+
+Dari hasil tersebut, didapat bahwa peubah $x_t$ dan $y_{t-1}$ memiliki nilai $P-Value<0.05$. Hal ini menunjukkan bahwa peubah $x_t$ dan $y_{t-1}$ berpengaruh signifikan terhadap $y$. Adapun model keseluruhannya adalah sebagai berikut
+
+$$
+\hat{Y_t}=(-5.682e+00)+(3.275e-05)X_t+(9.585e-01)Y_{t-1}
+$$
+
+### Peramalan Model Koyck
+
+Berikut adalah hasil peramalan y untuk 8 periode kedepan menggunakan model koyck
+
+```{r}
+fore.koyck <- forecast(model = model.koyck, x=test$Xt, h=8)
+fore.koyck
+```
+
+## Akurasi Model Koyck
+```{r}
+#mape data testing
+mape.koyck <- MAPE(fore.koyck$forecasts, test$Yt)
+
+#akurasi data training
+mape_train <- dLagM::GoF(model.koyck)["MAPE"]
+
+c("MAPE_testing" = mape.koyck, "MAPE_training" = mape_train)
+```
+Model Koyck merupakan peramalan model yang baik dengan nilai MAPE yang berkisar antara 10-20%.
+
+## Regression with Distributed Lag
+
+Pemodelan model Regression with Distributed Lag dengan `R` dapat menggunakan `dLagM::dlm()` . Fungsi umum dari `dlm` adalah sebagai berikut.
+
+```{r, eval=FALSE, error=FALSE}
+dlm(formula , data , x , y , q , remove )
+```
+
+Fungsi `dlm()` akan menerapkan model lag terdistribusi dengan satu atau lebih prediktor. Nilai `x` dan `y` tidak perlu sebagai objek *time series* (`ts`). $q$ adalah integer yang mewakili panjang *lag* yang terbatas.
+
+```{r}
+#penentuan lag optimum 
+finiteDLMauto(formula = Yt ~ Xt,
+              data = data.frame(train), model.type = "dlm", error.type = "AIC", trace = FALSE)
+```
+Berdasarkan output tersebut, lag optimum didapatkan 10 tahun sebelumnya.
+
+```{r}
+#model dlm dengan lag optimum
+model.dlm <- dlm(x = train$Xt,y = train$Yt , q = 10)
+summary(model.dlm)
+```
+Dari hasil diatas, didapat bahwa $P-value$ dari $x_{t-5}<0.05$. Hal ini menunjukkan bahwa $x_{t-5}$ berpengaruh signifikan terhadap $y$. Adapun model keseluruhan yang terbentuk adalah sebagai berikutAdapun keseluruhan model yang terbentuk adalah
+
+$$
+\hat{Y_t}=(4.625e+01)+ (1.616e-04)X_t+(1.077e-04)X_{t-1}+(5.769e-05)X_{t-2}-(2.872e-05)X_{t-3}+(5.437e-06)X_{t-4}-(2.105e-04)X_{t-5}-(5.358e-05)X_{t-6}+(1.899e-05)X_{t-7}+(3.284e-05)X_{t-8}+(3.317e-05)X_{t-9}+ 1.244e-04X_{t-10}
+$$
+```{r}
+AIC(model.dlm)
+```
+```{r}
+BIC(model.dlm)
+```
+
+Adapun hasil peramalan 8 periode kedepan menggunakan model tersebut adalah sebagai berikut
+
+```{r}
+#peramalan
+forecast(model = model.dlm, x=test$Xt, h=8)
+```
+#Akurasi DLM
+```{r}
+#mape data testing
+mape.dlm <- MAPE(fore.dlm$forecasts, test$Yt)
+
+#akurasi data training
+mape_train <- dLagM::GoF(model.dlm)["MAPE"]
+
+c("MAPE_testing" = mape.dlm, "MAPE_training" = mape_train)
+```
+Model DLM tersebut merupakan peramalan model yang layak dengan nilai MAPE yang berkisar antara 20-50%.
+
+## Model Autoregressive
+
+Peubah dependen dipengaruhi oleh peubah independen pada waktu sekarang, serta dipengaruhi juga oleh peubah dependen itu sendiri pada satu waktu yang lalu maka model tersebut disebut *autoregressive* (Gujarati 2004).
+
+### Pemodelan
+
+Pemodelan Autoregressive dilakukan menggunakan fungsi `dLagM::ardlDlm()` . Fungsi tersebut akan menerapkan *autoregressive* .
+
+### *Lag* Optimum
+```{r}
+#penentuan lag optimum
+model.ardl<- ardlBoundOrders(data = data.frame(data.lag), ic = "AIC", 
+                                  formula = Yt ~ Xt )
+min_p=c()
+for(i in 1:15){
+  min_p[i]=min(model.ardl$Stat.table[[i]])
+}
+q_opt=which(min_p==min(min_p, na.rm = TRUE))
+p_opt=which(model.ardl$Stat.table[[q_opt]] == 
+              min(model.ardl$Stat.table[[q_opt]], na.rm = TRUE))
+data.frame("q_optimum" = q_opt, "p_optimum" = p_opt, 
+           "AIC"=model.ardl$min.Stat)
+```
+Berdasarkan penentuan nilai p dan q optimum diperoleh lagi optimum untuk peubah Xt atau panen adalah 4 tahun sebelumnya dan lag optimum untuk peubah Yt atau harga wine adalah 15 tahun sebelumnya.
+
+```{r}
+#ARDL MODEL
+model.ardl = ardlDlm(x = train$Xt, y = train$Yt, p = 15 , q = 4)
+summary(model.ardl)
+```
+Melalui model ini diperoleh NaN pada error, t value, dan p-value. Oleh karena itu, nilai p dan q optimum ditelusuri lagi secara manual. Diperoleh p = 11 dan q = 7.
+```{r}
+model.ardl = ardlDlm(x = train$Xt, y = train$Yt, p = 11 , q = 7)
+summary(model.ardl)
+```
+Melalui model ARDL tidak diperoleh peubah yang berpengaruh secara signifikan. Model ini cukup baik dengan nilai R-Square sebesar 98.89%.
+
+```{r}
+AIC(model.ardl)
+```
+```{r}
+BIC(model.ardl)
+```
+
+#Peramalan ARDL
+```{r}
+forecast(model = model.ardl, x=test$Xt, h=8)
+```
+#Akurasi ARDL
+```{r}
+# mape akurasi testing
+mape.ardl <- MAPE(fore.ardl$forecasts, test$Yt) #data testing
+
+# mape akurasi data training
+mape_train <- GoF(model.ardl)["MAPE"]
+
+c("MAPE_testing" = mape.ardl, "MAPE_training" = mape_train)
+```
+Model ARDL tersebut merupakan model yang buruk dengan nilai MAPE yang lebih dari 50%.
+
+## Perbandingan Model
+```{r}
+akurasi <- matrix(c(mape.koyck, mape.dlm, mape.ardl))
+row.names(akurasi)<- c("Koyck","DLM","ARDL")
+colnames(akurasi) <- c("MAPE")
+akurasi
+```
+Berdasarkan nilai MAPE, model paling optimum didapat pada Model Koyck karena memiliki nilai MAPE yang terkecil.
+
+### Plot
+
+```{r}
+par(mfrow=c(1,1))
+plot(test$Xt, test$Yt, type="b", col="black", ylim=c(110,700))
+points(test$Xt, fore.koyck$forecasts,col="red")
+lines(test$Xt, fore.koyck$forecasts,col="red")
+points(test$Xt, fore.dlm$forecasts,col="blue")
+lines(test$Xt, fore.dlm$forecasts,col="blue")
+points(test$Xt, fore.ardl$forecasts,col="green")
+lines(test$Xt, fore.ardl$forecasts,col="green")
+legend("topleft",c("Aktual", "koyck","DLM", "ARDL"), lty=1, col=c("black","red","blue","green"), cex=0.8)
+```
+Berdasarkan plot tersebut, terlihat bahwa plot yang paling mendekati data aktualnya adalah Model Koyck, walaupun masih sangat jauh sehingga dapat disimpulkan model terbaik dalam kasus ini adalah model regresi koyck. Hal ini terjadi karena data testing hanya sejumlah 8 sehingga untuk mendapatkan model yang lebih akurat data testing harus ditambahkan.
+
+# Model Diagnostics
+
+## Uji Non Autokorelasi
+```{r}
+#Breusch-Godfrey test
+bgtest(model.koyck$model)
+
+#Durbin-Watson test
+dwtest(model.koyck$model)
+```
+Berdasarkan uji Breusch-Godfrey dan uji Durbin-Watson dihasilkan nilai p-value = 0.7074 > alpha 5% sehingga tidak terdapat autokorelasi pada model ini.
+
+## Uji heterogenitas
+```{r}
+bptest(model.koyck$model)
+```
+Berdasarkan uji Breusch-Pagan dihasilkan nilai p-value = 0.3306 > alpha 5% sehingga tidak terjadi heteroskedastisitas pada model.
+
+## Uji Normalitas
+```{r}
+ks.test(model.koyck$model$residuals, "pnorm")
+```
+Berdasarkan uji Kolmogorov-Smirnov dihasilkan nilai p-value = 6.368e-08 < alpha 5% sehingga sisaan tidak menyebar normal.
