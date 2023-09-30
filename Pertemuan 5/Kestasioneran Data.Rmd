@@ -1,1 +1,220 @@
+---
+title: "Pertemuan 5 - Kestasioneran Data"
+author: "G1401211043_Yogi Nur Hamid"
+date: "2023-09-30"
+output:
+  word_document: default
+  html_document: default
+---
 
+```{r}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+```
+
+# Data
+
+## Impor data
+
+```{r}
+data <- rio::import("https://raw.githubusercontent.com/yoginurhamid/MPDW/main/Pertemuan%205/Data%20Prak%201.csv")
+data
+```
+
+## Merapihkan data
+
+```{r}
+#Membuat data frame baru dengan kolom periode
+data1 <- cbind.data.frame(seq(1,210),data$`Jumlah penumpang KRL Jabodetabek (Ribu jiwa)`)
+
+#Mengganti nama kolom
+colnames(data1)[1] <- "Periode"
+colnames(data1)[2] <- "Penumpang"
+
+data
+```
+
+# Kestasioneran Data
+
+## Eksplorasi data
+
+Identifikasi variabel
+
+```{r}
+Periode <- data1$Periode
+Penumpang <- data1$Penumpang
+```
+
+Membuat data time series
+
+```{r}
+stas <- ts(data1$Penumpang)
+```
+
+```{r}
+mean(stas)
+```
+
+Rata-rata jumlah penumpang KRL sebesar 16127.94 jiwa.
+
+## Plot time series
+
+```{r}
+plot_ts <- stas |> as_tsibble() |> 
+  ggplot(aes(x = Periode, y = Penumpang)) + geom_line() + theme_bw() +
+  xlab("Periode") + ylab("Penumpang")
+plot_ts
+```
+
+Berdasarkan plot deret waktu, terlihat bahwa data tidak stasioner dalam rataan maupun ragam.
+
+## Plot ACF
+
+```{r}
+acf(stas)
+```
+
+Berdasarkan plot ACF, terlihat bahwa data cenderung \*tails off\* yang mengartikan bahwa data tidak stasioner.
+
+## Uji ADF
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+```{r}
+tseries::adf.test(stas)
+```
+
+Diperoleh *p-value* sebesar 0.5544 \> 0.05 sehingga Tak Tolak $H_0$. Artinya, belum cukup bukti untuk menyatakan bahwa data stasioner dalam rataan. Pernyataan tersebut terbukti sama dengan grafik yang ditunjukkan oleh plot time series dan plot ACF.
+
+## Plot Box-Cox
+
+```{r}
+#Menentukan n = banyak data jumlah penumpang
+n <- length(stas)
+
+#Membuat plot
+index <- seq(1:n) 
+
+bc <- boxcox(stas~index, lambda = seq(-0.4,0.4,by=0.001))
+
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Berdasarkan plot box-cox, nilai rounded value (\$\\lambda\$) optimum sebesar -0.005 dan pada selang kepercayaan 95% nilai memiliki batas bawah -0.300 dan batas atas 0.300. Selang tersebut tidak memuat nilai satu sehingga dapat dikatakan bahwa data jumlah penumpang KRL tidak stasioner dalam ragam.
+
+# Partisi Data
+
+## Bagian 1
+
+```{r}
+dt_stas1 <- stas[1:70] |> ts()
+mean(dt_stas1)
+var(dt_stas1)
+```
+
+### Plot time series
+
+```{r}
+dt_stas1 |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) +
+  geom_line() + theme_bw() +
+  xlab("Periode") + ylab("Penumpang")
+```
+
+Berdasarkan plot deret waktu, terlihat bahwa data tidak stasioner dalam rataan, ditandai dengan data yang tidak menyebar di sekitar nilai tengah. Namun, belum pasti data tidak stasioner dalam ragam.
+
+### Plot ACF
+
+```{r}
+acf(dt_stas1)
+```
+
+Berdasarkan plot ACF, terlihat bahwa data hasil partisi yang pertama cenderung \*tails off\* yang mengartikan bahwa data tidak stasioner dalam rataan.
+
+### Uji ADF
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+```{r}
+tseries::adf.test(dt_stas1)
+```
+
+Diperoleh *p-value* sebesar 0.5924 \> 0.05 sehingga Tak Tolak $H_0$. Artinya, belum cukup bukti untuk menyatakan bahwa data stasioner dalam rataan. Pernyataan tersebut terbukti sama dengan grafik yang ditunjukkan oleh plot time series dan plot ACF.
+
+### Plot Box-Cox
+
+```{r}
+index <- seq(1:70)
+bc = boxcox(dt_stas1~index, lambda = seq(0.5,6.5,by=0.01))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Berdasarkan plot box-cox, nilai rounded value (\$\\lambda\$) optimum sebesar 3.44 dan pada selang kepercayaan 95% nilai memiliki batas bawah 0.97 dan batas atas 6.12. Selang tersebut memuat nilai satu sehingga dapat dikatakan bahwa data jumlah penumpang KRL stasioner dalam ragam.
+
+## Bagian 2
+
+```{r}
+dt_stas2 <- stas[1:140] |> ts()
+mean(dt_stas2)
+var(dt_stas2)
+```
+
+### Plot time series
+
+```{r}
+dt_stas2 |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) +
+  geom_line() + theme_bw() +
+  xlab("Periode") + ylab("Penumpang")
+```
+
+Berdasarkan plot deret waktu, terlihat bahwa data tidak stasioner dalam rataan dan ragam, ditandai dengan data yang tidak menyebar di sekitar nilai tengah dan lebar pita yang cenderung berbeda.
+
+### Plot ACF
+
+```{r}
+acf(dt_stas2)
+```
+
+Berdasarkan plot ACF, terlihat bahwa data hasil partisi yang pertama cenderung \*tails off\* yang mengartikan bahwa data tidak stasioner dalam rataan.
+
+### Uji ADF
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+```{r}
+adf.test(dt_stas2)
+```
+
+Diperoleh *p-value* sebesar 0.9779 \> 0.05 sehingga Tak Tolak $H_0$. Artinya, belum cukup bukti untuk menyatakan bahwa data stasioner dalam rataan. Pernyataan tersebut terbukti sama dengan grafik yang ditunjukkan oleh plot time series dan plot ACF.
+
+### Plot Box-Cox
+
+```{r}
+index <- seq(1:140)
+bc = boxcox(dt_stas2~index, lambda = seq(-2,-0.5,by=0.01))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Berdasarkan plot box-cox, nilai rounded value (\$\\lambda\$) optimum sebesar -1.38 dan pada selang kepercayaan 95% nilai memiliki batas bawah -1.77 dan batas atas -0.98. Selang tersebut tidak memuat nilai satu sehingga dapat dikatakan bahwa data jumlah penumpang KRL tidak stasioner dalam ragam.
