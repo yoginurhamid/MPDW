@@ -191,7 +191,7 @@ Berdasarkan plot deret waktu, terlihat bahwa data tidak stasioner dalam rataan d
 acf(dt_stas2)
 ```
 
-Berdasarkan plot ACF, terlihat bahwa data hasil partisi yang pertama cenderung \*tails off\* yang mengartikan bahwa data tidak stasioner dalam rataan.
+Berdasarkan plot ACF, terlihat bahwa data hasil partisi yang kedua cenderung \*tails off\* yang mengartikan bahwa data tidak stasioner dalam rataan.
 
 ### Uji ADF
 
