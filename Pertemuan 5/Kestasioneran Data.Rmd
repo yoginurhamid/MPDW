@@ -3,8 +3,8 @@ title: "Pertemuan 5 - Kestasioneran Data"
 author: "G1401211043_Yogi Nur Hamid"
 date: "2023-09-30"
 output:
-  word_document: default
   html_document: default
+  word_document: default
 ---
 
 ```{r}
